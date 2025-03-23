@@ -1,0 +1,300 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CasaQuest</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#2e2a27" />
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      background-color: #2e2a27;
+      color: #f0e9e2;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    #splash {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background-color: #2e2a27;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      animation: fadeOut 1s ease 3s forwards;
+    }
+
+    #splash img {
+      width: 200px;
+      image-rendering: pixelated;
+      animation: fadeIn 1s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.8); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes fadeOut {
+      to { opacity: 0; visibility: hidden; }
+    }
+
+    #main-content {
+      display: none;
+    }
+
+    .app-loaded #main-content {
+      display: block;
+    }
+
+    .app-loaded #splash {
+      display: none;
+    }
+
+    .xp-popup {
+      position: fixed;
+      font-size: 1.5em;
+      color: #ffc107;
+      animation: floatUp 1s ease-out forwards;
+      pointer-events: none;
+      z-index: 10000;
+    }
+
+    @keyframes floatUp {
+      from { opacity: 1; transform: translateY(0); }
+      to { opacity: 0; transform: translateY(-50px); }
+    }
+
+    h1 {
+      text-align: center;
+      padding-top: 50px;
+    }
+  </style>
+</head>
+<body>
+  <div id="choose-role" style="position:fixed; top:0; left:0; width:100%; height:100%; background:#2e2a27; color:#f0e9e2; display:flex; flex-direction:column; justify-content:center; align-items:center; z-index:10000;">
+    <h1>Scegli il tuo personaggio</h1>
+    <button onclick="selectRole('Guerriero del Pulito')">🛡️ Guerriero del Pulito</button>
+    <button onclick="selectRole('Stregone dell’Ordine')">🪄 Stregone dell’Ordine</button>
+    <button onclick="selectRole('Ranger della Routine')">🏹 Ranger della Routine</button>
+  </div>
+  <div id="splash">
+    <img src="splash_logo_pixelart.png" alt="CasaQuest Logo" />
+  </div>
+
+  <div id="main-content">
+    <h1>🏡 Benvenuto in CasaQuest!</h1>
+    <button onclick="completeTask(10)">Completa attività</button>
+  
+    <div style="text-align:center; margin-top: 30px;">
+      <h2>📛 Il tuo personaggio</h2>
+    <p id="player-role" style="text-align:center; font-weight:bold;"></p>
+    <h2>🎯 Missioni del Giorno</h2>
+    <ul id="daily-quests" style="list-style: none; padding: 0; margin-bottom: 30px;"></ul>
+    <h2>⏱️ Attività Cronometrate</h2>
+    <div style="text-align:center; margin-bottom: 20px;">
+      <button onclick="startTaskTimer()">Avvia Timer Attività</button>
+      <button onclick="stopTaskTimer()">Completa Task Cronometrata</button>
+      <p id="timer-display" style="font-size:1.5em; margin-top: 10px;">00:00</p>
+    </div>
+    <h2>🏆 Migliori Tempi</h2>
+    <ol id="fastest-tasks" style="max-width: 300px; margin: 0 auto 30px auto; padding-left: 20px;"></ol>
+    <h2>📜 Storico Attività</h2>
+      <ul id="task-history" style="list-style: none; padding: 0; max-width: 300px; margin: 0 auto;"></ul>
+    </div>
+  </div>
+
+  <audio id="task-sound" src="complete_task_sound.wav" preload="auto"></audio>
+
+  <script>
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        document.body.classList.add('app-loaded');
+      }, 3000);
+    });
+
+    
+    const dailyQuestKey = 'casaquest_daily_quests';
+    const lastResetKey = 'casaquest_last_reset';
+
+    const availableQuests = [
+      "Passare l'aspirapolvere", "Spolverare i mobili", "Buttare la spazzatura",
+      "Fare la spesa", "Riordinare un armadio/cassetto", "Pagare le bollette",
+      "Pulire i vetri", "Lavare i piatti", "Pulire il piano cottura",
+      "Pulire il frigorifero", "Organizzare la dispensa", "Preparare la cena",
+      "Pulire il forno", "Pulire il water", "Pulire la doccia/vasca",
+      "Pulire il lavandino", "Cambiare gli asciugamani", "Pulire lo specchio",
+      "Rifare il letto", "Cambiare le lenzuola", "Fare una lavatrice",
+      "Stendere il bucato", "Stirare i vestiti", "Organizzare l'armadio"
+    ];
+
+    function getTodayDate() {
+      const now = new Date();
+      return now.toISOString().split('T')[0];
+    }
+
+    function generateDailyQuests() {
+      const quests = [];
+      const shuffled = [...availableQuests].sort(() => 0.5 - Math.random());
+      for (let i = 0; i < 3; i++) {
+        quests.push({ task: shuffled[i], completed: false });
+      }
+      localStorage.setItem(dailyQuestKey, JSON.stringify(quests));
+      localStorage.setItem(lastResetKey, getTodayDate());
+      return quests;
+    }
+
+    function loadDailyQuests() {
+      const lastReset = localStorage.getItem(lastResetKey);
+      const today = getTodayDate();
+      if (lastReset !== today) {
+        return generateDailyQuests();
+      }
+      const saved = localStorage.getItem(dailyQuestKey);
+      return saved ? JSON.parse(saved) : generateDailyQuests();
+    }
+
+    function renderDailyQuests(quests) {
+      const ul = document.getElementById('daily-quests');
+      ul.innerHTML = '';
+      quests.forEach((quest, index) => {
+        const li = document.createElement('li');
+        li.textContent = (quest.completed ? "✅ " : "⬜ ") + quest.task;
+        li.style.margin = '5px 0';
+        li.style.cursor = 'pointer';
+        li.addEventListener('click', () => {
+          if (!quest.completed) {
+            quest.completed = true;
+            localStorage.setItem(dailyQuestKey, JSON.stringify(quests));
+            renderDailyQuests(quests);
+            completeTask(10); // bonus XP
+          }
+        });
+        ul.appendChild(li);
+      });
+    }
+
+    const dailyQuests = loadDailyQuests();
+    renderDailyQuests(dailyQuests);
+
+
+    
+    let timerStart = null;
+let timerBonus = 0;
+    let timerInterval = null;
+    const timerDisplay = document.getElementById('timer-display');
+
+    
+    function startTaskTimer() {
+      const savedRole = localStorage.getItem('casaquest_player_role');
+      timerBonus = (savedRole === 'Ranger della Routine') ? 5 : 0;
+
+      timerStart = Date.now();
+      timerDisplay.textContent = "00:00";
+      timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - timerStart) / 1000) + timerBonus;
+        const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
+        const seconds = String(elapsed % 60).padStart(2, '0');
+        timerDisplay.textContent = `${minutes}:${seconds}`;
+      }, 1000);
+    }
+
+    function stopTaskTimer() {
+      if (!timerStart) return;
+      const elapsed = Math.floor((Date.now() - timerStart) / 1000) + timerBonus;
+      clearInterval(timerInterval);
+      timerInterval = null;
+      timerStart = null;
+      const name = prompt("Nome attività cronometrata:");
+      if (!name) return;
+      saveFastestTask(name, elapsed);
+      renderFastestTasks();
+      completeTask(10); // XP bonus
+    }
+
+    function saveFastestTask(name, timeInSec) {
+      const entry = { name, time: timeInSec };
+      let data = JSON.parse(localStorage.getItem("fastest_tasks") || "[]");
+      data.push(entry);
+      data.sort((a, b) => a.time - b.time);
+      if (data.length > 5) data = data.slice(0, 5);
+      localStorage.setItem("fastest_tasks", JSON.stringify(data));
+    }
+
+    function renderFastestTasks() {
+      const data = JSON.parse(localStorage.getItem("fastest_tasks") || "[]");
+      const list = document.getElementById("fastest-tasks");
+      list.innerHTML = "";
+      data.forEach((entry) => {
+        const li = document.createElement("li");
+        const min = Math.floor(entry.time / 60);
+        const sec = entry.time % 60;
+        li.textContent = `${entry.name} - ${min}m ${sec}s`;
+        list.appendChild(li);
+      });
+    }
+
+    renderFastestTasks();
+
+
+    
+    const roleKey = 'casaquest_player_role';
+    const roleDisplay = document.getElementById('player-role');
+    const roleSelection = document.getElementById('choose-role');
+
+    function selectRole(role) {
+      localStorage.setItem(roleKey, role);
+      location.reload();
+    }
+
+    function loadRole() {
+      const savedRole = localStorage.getItem(roleKey);
+      if (!savedRole) {
+        roleSelection.style.display = 'flex';
+      } else {
+        roleSelection.style.display = 'none';
+        roleDisplay.textContent = savedRole;
+      }
+    }
+
+    loadRole();
+
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+
+    
+    function completeTask(points) {
+      const now = new Date();
+      const timestamp = now.toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
+
+      // Salva storico
+      const historyItem = document.createElement('li');
+      historyItem.textContent = `✔️ +${points} XP - ${timestamp}`;
+      document.getElementById('task-history').prepend(historyItem);
+
+      // Suono
+      const audio = document.getElementById('task-sound');
+      audio.currentTime = 0;
+      audio.play();
+
+      // Effetto visivo
+      const popup = document.createElement('div');
+      popup.className = 'xp-popup';
+      popup.textContent = `+${points} XP!`;
+      popup.style.left = Math.random() * (window.innerWidth - 100) + 'px';
+      popup.style.top = Math.random() * (window.innerHeight - 100) + 'px';
+      document.body.appendChild(popup);
+
+      setTimeout(() => {
+        document.body.removeChild(popup);
+      }, 1000);
+    }
+  </script>
+</body>
+</html>
